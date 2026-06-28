@@ -5,9 +5,15 @@ const LAYOUT = [
   ['Ζ', 'Χ', 'Ψ', 'Ω', 'Β', 'Ν', 'Μ'],
 ]
 
-export default function Keyboard({ guessed, phraseLetters, lastWrong, onKey }) {
+export default function Keyboard({
+  guessed,
+  phraseLetters,
+  lastWrong,
+  onKey,
+  disabled,
+}) {
   return (
-    <div className="keyboard">
+    <div className={`keyboard ${disabled ? 'disabled' : ''}`}>
       {LAYOUT.map((row, i) => (
         <div className="kb-row" key={i}>
           {row.map((key) => {

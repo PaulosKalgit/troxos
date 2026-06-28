@@ -1,18 +1,43 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Board from './components/Board'
 import Keyboard from './components/Keyboard'
 import Setup from './components/Setup'
 import Scoreboard from './components/Scoreboard'
 import SideMenu from './components/SideMenu'
 import Solve from './components/Solve'
+import Wheel from './components/Wheel'
 import { buildGrid } from './grid'
 import { normalize, isGreekLetter } from './greek'
 import './App.css'
 
 const FALLBACK = { title: 'Η ΑΛΙΚΗ ΣΤΗ ΧΩΡΑ ΤΩΝ ΘΑΥΜΑΤΩΝ', category: '', description: '' }
-const POINTS_PER_LETTER = 10
 const STAGGER = 700 // ms between each tile reveal (multi-letter)
 const FLASH = 250 // ms a single tile stays green before showing its letter
+
+// Wheel segments (clockwise). Light gradient colors cycling
+// yellow/green/blue/orange/purple, plus Bankrupt (black) and Lose a turn (ice).
+// Each slice fills with a diagonal gradient from c1 (light) to c2 (deep).
+// Colors cycle yellow/green/blue/orange/purple so no two neighbors match.
+const YELLOW = { c1: '#fff3a0', c2: '#e8a200', textColor: '#111111' }
+const GREEN = { c1: '#8cf07a', c2: '#0a8512', textColor: '#111111' }
+const BLUE = { c1: '#9fccff', c2: '#0a4fc4', textColor: '#111111' }
+const ORANGE = { c1: '#ffca87', c2: '#df5e00', textColor: '#111111' }
+const PURPLE = { c1: '#ee86f6', c2: '#86089c', textColor: '#ffffff' }
+
+const SEGMENTS = [
+  { label: '10', value: 10, ...YELLOW },
+  { label: '40', value: 40, ...GREEN },
+  { label: '70', value: 70, ...BLUE },
+  { label: '30', value: 30, ...ORANGE },
+  { label: '90', value: 90, ...PURPLE },
+  { label: '   BANKRUPT', value: 'BANKRUPT', c1: '#4d4d4d', c2: '#000000', textColor: '#ffffff', small: true },
+  { label: '100', value: 100, ...YELLOW },
+  { label: '20', value: 20, ...GREEN },
+  { label: '60', value: 60, ...BLUE },
+  { label: '80', value: 80, ...ORANGE },
+  { label: '50', value: 50, ...PURPLE },
+  { label: '   LOSE A TURN', value: 'LOSE', c1: '#ffffff', c2: '#b9c5cd', textColor: '#111111', small: true },
+]
 
 export default function App() {
   const [phrase, setPhrase] = useState('')
@@ -29,6 +54,10 @@ export default function App() {
   const [winner, setWinner] = useState(null)
   const [entries, setEntries] = useState([])
   const [menuOpen, setMenuOpen] = useState(false)
+  const [rotation, setRotation] = useState(0)
+  const [spinning, setSpinning] = useState(false)
+  const [spinValue, setSpinValue] = useState(null) // number = may guess; null = must spin
+  const pendingSegment = useRef(null)
 
   // Choose a random puzzle and load its title / category / description.
   const pickPuzzle = (list) => {
@@ -71,6 +100,40 @@ export default function App() {
     setLastWrong(null)
     setLocked(false)
     setWinner(null)
+    setSpinValue(null)
+    setSpinning(false)
+  }
+
+  const nextPlayer = () => setCurrent((c) => (c + 1) % players.length)
+
+  // Spin the wheel: lands a random segment under the top pointer.
+  const spin = () => {
+    if (phase !== 'playing' || locked || spinning || spinValue !== null) return
+    const idx = Math.floor(Math.random() * SEGMENTS.length)
+    pendingSegment.current = idx
+    const step = 360 / SEGMENTS.length
+    const targetMod = (360 - idx * step) % 360
+    const currentMod = ((rotation % 360) + 360) % 360
+    const delta = (targetMod - currentMod + 360) % 360
+    setSpinning(true)
+    setRotation(rotation + 3 * 360 + delta)
+  }
+
+  // Called when the spin animation finishes: apply the landed segment.
+  const onSpinEnd = () => {
+    if (!spinning) return
+    setSpinning(false)
+    const seg = SEGMENTS[pendingSegment.current]
+    if (seg.value === 'BANKRUPT') {
+      setPlayers((ps) =>
+        ps.map((p, i) => (i === current ? { ...p, round: 0 } : p))
+      )
+      nextPlayer()
+    } else if (seg.value === 'LOSE') {
+      nextPlayer()
+    } else {
+      setSpinValue(seg.value) // player may now guess one letter
+    }
   }
 
   const startGame = (names) => {
@@ -206,29 +269,31 @@ export default function App() {
   }
 
   const guessLetter = (letter) => {
-    if (phase !== 'playing' || locked) return
+    if (phase !== 'playing' || locked || spinning) return
+    if (typeof spinValue !== 'number') return // must spin for a value first
     const L = normalize(letter)
     if (!isGreekLetter(L) || guessed.has(L)) return
 
+    const value = spinValue
+    setSpinValue(null) // spin is consumed
     const nextGuessed = new Set(guessed).add(L)
     setGuessed(nextGuessed)
     const cells = cellsForLetter(L)
 
     if (cells.length > 0) {
+      // Correct: earn value x occurrences, keep the turn (must spin again).
       setLastWrong(null)
       const currentNow = current
       setPlayers((ps) =>
         ps.map((p, i) =>
-          i === currentNow
-            ? { ...p, round: p.round + POINTS_PER_LETTER * cells.length }
-            : p
+          i === currentNow ? { ...p, round: p.round + value * cells.length } : p
         )
       )
       runReveal(cells, nextGuessed, currentNow)
     } else {
       // Wrong: mark the key red and pass the turn to the next player.
       setLastWrong(L)
-      setCurrent((c) => (c + 1) % players.length)
+      nextPlayer()
     }
   }
 
@@ -236,7 +301,7 @@ export default function App() {
   // for the current player; otherwise the turn passes to the next player.
   // Returns true if the guess was correct (so the Solve box can react).
   const submitSolve = (text) => {
-    if (phase !== 'playing' || locked) return false
+    if (phase !== 'playing' || locked || spinning) return false
     const clean = normalize(text).replace(/\s+/g, ' ').trim()
     const target = phrase.replace(/\s+/g, ' ').trim()
     if (clean && clean === target) {
@@ -256,7 +321,7 @@ export default function App() {
   // Reveal the closest still-hidden letter (top -> bottom, left -> right), plus
   // all its other occurrences. No points, turn unchanged.
   const revealHint = () => {
-    if (phase !== 'playing' || locked) return
+    if (phase !== 'playing' || locked || spinning) return
     let target = null
     for (let r = 0; r < grid.length && !target; r++) {
       for (let c = 0; c < grid[r].length; c++) {
@@ -302,22 +367,56 @@ export default function App() {
         onResetScores={resetScores}
         onHint={revealHint}
       />
-      <div className="stage">
-        <Scoreboard
-          players={players}
-          current={current}
-          active={phase === 'playing'}
-        />
-        <Board grid={grid} revealed={revealed} flashing={flashing} />
-        {category && <div className="clue">{category}</div>}
-        <div className="keyboard-area">
-          <Keyboard
-            guessed={guessed}
-            phraseLetters={phraseLetters}
-            lastWrong={lastWrong}
-            onKey={guessLetter}
+      <div className="table">
+        <div className="stage">
+          <Scoreboard
+            players={players}
+            current={current}
+            active={phase === 'playing'}
           />
-          <Solve onSolve={submitSolve} />
+          <Board grid={grid} revealed={revealed} flashing={flashing} />
+          {category && <div className="clue">{category}</div>}
+          <div className="keyboard-area">
+            <Keyboard
+              guessed={guessed}
+              phraseLetters={phraseLetters}
+              lastWrong={lastWrong}
+              onKey={guessLetter}
+              disabled={spinning || spinValue === null}
+            />
+            <div className="side-controls">
+              <Solve onSolve={submitSolve} />
+              <button
+                className="spin-btn"
+                onClick={spin}
+                disabled={spinning || spinValue !== null}
+              >
+                Spin
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="wheel-col">
+          <Wheel
+            segments={SEGMENTS}
+            rotation={rotation}
+            spinning={spinning}
+            onSpinEnd={onSpinEnd}
+            onSpin={spin}
+            canSpin={phase === 'playing' && !spinning && spinValue === null}
+          />
+          <div className="wheel-status">
+            {spinning ? (
+              'Spinning…'
+            ) : spinValue !== null ? (
+              <>
+                <span className="spin-points">×{spinValue}</span> — pick a letter
+              </>
+            ) : (
+              'Spin the wheel'
+            )}
+          </div>
         </div>
       </div>
 
@@ -328,14 +427,19 @@ export default function App() {
             <p className="answer">{phrase}</p>
             {description && <p className="description">{description}</p>}
             <ul className="final-scores">
-              {[...players]
-                .sort((a, b) => b.banked + b.round - (a.banked + a.round))
-                .map((p) => (
-                  <li key={p.name}>
-                    <span>{p.name}</span>
-                    <span>{p.banked + p.round}</span>
-                  </li>
-                ))}
+              {(() => {
+                // Banked totals, with the winner's round folded into theirs.
+                const total = (p) =>
+                  p.banked + (p === players[winner] ? p.round : 0)
+                return [...players]
+                  .sort((a, b) => total(b) - total(a))
+                  .map((p) => (
+                    <li key={p.name}>
+                      <span>{p.name}</span>
+                      <span>{total(p)}</span>
+                    </li>
+                  ))
+              })()}
             </ul>
             <button className="primary-btn" onClick={nextRound}>
               Next round
