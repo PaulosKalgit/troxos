@@ -10,13 +10,21 @@ export default function Keyboard({
   phraseLetters,
   lastWrong,
   onKey,
-  disabled,
+  mode, // 'consonant' | 'vowel' | null
+  vowels,
 }) {
   return (
-    <div className={`keyboard ${disabled ? 'disabled' : ''}`}>
+    <div className="keyboard">
       {LAYOUT.map((row, i) => (
         <div className="kb-row" key={i}>
           {row.map((key) => {
+            const isVowel = vowels.has(key)
+            const enabled =
+              mode === 'consonant'
+                ? !isVowel
+                : mode === 'vowel'
+                  ? isVowel
+                  : false
             let state = ''
             if (key === lastWrong) {
               state = 'wrong'
@@ -26,8 +34,9 @@ export default function Keyboard({
             return (
               <button
                 key={key}
-                className={`key ${state}`}
-                onClick={() => onKey(key)}
+                className={`key ${state} ${enabled ? '' : 'off'}`}
+                disabled={!enabled}
+                onClick={() => enabled && onKey(key)}
               >
                 {key}
               </button>

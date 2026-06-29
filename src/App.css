@@ -47,8 +47,38 @@
   transform: translateX(0);
 }
 
+.menu-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lang-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.lang-btn {
+  padding: 4px;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: #2a2a2d;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.lang-btn.active {
+  border-color: #f2c100;
+}
+
+.flag {
+  width: 30px;
+  height: 20px;
+  display: block;
+  border-radius: 2px;
+}
+
 .menu-close {
-  align-self: flex-end;
   background: none;
   border: none;
   color: #aaaaaa;
@@ -269,22 +299,75 @@
 
 .side-controls {
   display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.side-left {
+  display: flex;
   flex-direction: column;
   gap: 8px;
   align-items: stretch;
 }
 
-.spin-btn {
+.vowel-btn {
   height: 68px;
-  padding: 0 28px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(160deg, #ff6a6a 0%, #c0392b 100%);
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.1;
+}
+
+.vowel-btn .cost {
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.vowel-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.spin-btn {
+  align-self: stretch;
+  min-height: 68px;
+  width: 130px;
+  padding: 0 20px;
   border: none;
   border-radius: 8px;
   background: linear-gradient(160deg, #ffb44d 0%, #e86a00 100%);
   color: #111111;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 800;
   letter-spacing: 1px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Shared text style for the three action buttons: bold black with a thin
+   white outer stroke. */
+.solve-btn,
+.vowel-btn,
+.spin-btn {
+  color: #000000;
+  font-weight: 900;
+  text-shadow:
+    -1px -1px 0 #fff,
+    1px -1px 0 #fff,
+    -1px 1px 0 #fff,
+    1px 1px 0 #fff;
 }
 
 .spin-btn:hover:not(:disabled) {
@@ -385,9 +468,10 @@
   gap: 10px;
 }
 
-.keyboard.disabled {
-  opacity: 0.45;
-  pointer-events: none;
+/* Keys not valid for the current mode (e.g. vowels during a consonant turn). */
+.key.off {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .solve-btn {
@@ -620,21 +704,22 @@
   text-align: center;
 }
 
-/* Per-player dark colors (orange, lime, blue, red, purple). */
+/* Per-player colors (orange, lime, blue, red, purple) — brighter, with a
+   pronounced diagonal gradient. */
 .score-card.player-0 {
-  background: linear-gradient(160deg, #c2701c, #6b3a0e);
+  background: linear-gradient(135deg, #ffa23f 0%, #a85716 100%);
 }
 .score-card.player-1 {
-  background: linear-gradient(160deg, #5f8a1f, #314810);
+  background: linear-gradient(135deg, #93d637 0%, #3c6312 100%);
 }
 .score-card.player-2 {
-  background: linear-gradient(160deg, #1f63bb, #103466);
+  background: linear-gradient(135deg, #3f94f5 0%, #134a92 100%);
 }
 .score-card.player-3 {
-  background: linear-gradient(160deg, #b23535, #5e1a1a);
+  background: linear-gradient(135deg, #f25c5c 0%, #8f2727 100%);
 }
 .score-card.player-4 {
-  background: linear-gradient(160deg, #7e2f90, #41184a);
+  background: linear-gradient(135deg, #c763dd 0%, #5c2470 100%);
 }
 
 /* Gold highlight for the player whose turn it is (keeps the player color). */
@@ -699,8 +784,9 @@
 
 .description {
   margin: 0;
-  font-size: 14px;
-  color: #cfcfcf;
+  font-size: 17px;
+  font-weight: 600;
+  color: #f5f5f5;
 }
 
 .final-scores {

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export default function Solve({ onSolve }) {
+export default function Solve({ onSolve, label = 'Solve' }) {
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
   const [result, setResult] = useState(null) // 'correct' | 'wrong' | null
@@ -20,7 +20,7 @@ export default function Solve({ onSolve }) {
   if (!open) {
     return (
       <button className="solve-btn" onClick={() => setOpen(true)}>
-        Solve
+        {label}
       </button>
     )
   }
