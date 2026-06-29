@@ -42,6 +42,10 @@ const SEGMENTS = [
 const VOWELS = new Set(['Α', 'Ε', 'Η', 'Ι', 'Ο', 'Υ', 'Ω'])
 const VOWEL_COST = 50
 
+// Per-player accent colors (player 1..5): green, blue, orange, purple, red.
+// Used for the score cards and to color the player's name in messages.
+const PLAYER_COLORS = ['#62d452', '#5aa6ff', '#ffae52', '#d27bea', '#ff5c5c']
+
 export default function App() {
   const [phrase, setPhrase] = useState('')
   const [category, setCategory] = useState('')
@@ -62,6 +66,7 @@ export default function App() {
   const [spinning, setSpinning] = useState(false)
   const [spinValue, setSpinValue] = useState(null) // consonant multiplier from last spin
   const [guessMode, setGuessMode] = useState(null) // 'consonant' | 'vowel' | null
+  const [redMsg, setRedMsg] = useState(null) // text shown in the red flash, or null
   const pendingSegment = useRef(null)
 
   // Choose a random puzzle and load its title / category / description.
@@ -97,10 +102,50 @@ export default function App() {
   const phraseLetters = new Set([...phrase].filter(isGreekLetter))
   const grid = buildGrid(phrase)
 
+  // Any unrevealed consonant still in the puzzle? If not, spinning is pointless.
+  const consonantsLeft = [...phraseLetters].some(
+    (ch) => !guessed.has(ch) && !VOWELS.has(ch)
+  )
+
   const tr = {
-    el: { solve: 'Λύση', vowel: 'Φωνήεν', spin: 'Γύρισμα' },
-    en: { solve: 'Solve', vowel: 'Vowel', spin: 'Spin' },
+    el: {
+      solve: 'Λύση',
+      vowel: 'Φωνήεν',
+      spin: 'Γύρισμα',
+      spinOrVowel: 'Γύρισε ή αγόρασε Φωνήεν',
+      turn: (n) => <>Σειρά του {n}</>,
+      wrongLetter: 'Λάθος γράμμα! \nΑλλαγή σειράς',
+      bankrupt: (n) => <>Χρεοκοπία για {n}!</>,
+      lose: (n) => <>{n} χάνεις τη σειρά σου!</>,
+      spinning: 'γυρίζει…',
+      pickConsonant: 'διάλεξε σύμφωνο',
+      pickVowel: 'Διάλεξε φωνήεν',
+      noConsonants:
+        'Δεν υπάρχουν άλλα σύμφωνα στον γρίφο, μόνο φωνήεντα έχουν απομείνει. Μπορείτε να αγοράσετε φωνήεν ή να λύσετε.',
+    },
+    en: {
+      solve: 'Solve',
+      vowel: 'Vowel',
+      spin: 'Spin',
+      spinOrVowel: 'Spin or buy a vowel',
+      turn: (n) => <>{n}'s turn!</>,
+      wrongLetter: 'Wrong letter! \nTurn passes',
+      bankrupt: (n) => <>Bankruptcy for {n}!</>,
+      lose: (n) => <>{n} loses a turn!</>,
+      spinning: 'is spinning…',
+      pickConsonant: 'pick a consonant',
+      pickVowel: 'Pick a vowel',
+      noConsonants:
+        'No consonants left in the puzzle — only vowels remain. You can buy a vowel or solve.',
+    },
   }[lang]
+
+  // Player's name colored with their accent, for use inside messages.
+  const playerName = (idx) => (
+    <span className="msg-name" style={{ color: PLAYER_COLORS[idx] }}>
+      {players[idx]?.name ?? ''}
+    </span>
+  )
 
   // Wheel labels: numbers as-is, special slices translated (3 leading spaces
   // keep them off the rim).
@@ -124,13 +169,21 @@ export default function App() {
     setSpinValue(null)
     setGuessMode(null)
     setSpinning(false)
+    setRedMsg(null)
   }
 
   const nextPlayer = () => setCurrent((c) => (c + 1) % players.length)
 
+  // Show a red status message for 1 second.
+  const flashRed = (msg) => {
+    setRedMsg(msg)
+    setTimeout(() => setRedMsg(null), 1000)
+  }
+
   // Spin the wheel: lands a random segment under the top pointer.
   const spin = () => {
     if (phase !== 'playing' || locked || spinning || guessMode !== null) return
+    if (!consonantsLeft) return // only vowels remain; must buy a vowel or solve
     const idx = Math.floor(Math.random() * SEGMENTS.length)
     pendingSegment.current = idx
     const step = 360 / SEGMENTS.length
@@ -146,12 +199,15 @@ export default function App() {
     if (!spinning) return
     setSpinning(false)
     const seg = SEGMENTS[pendingSegment.current]
+    const nameEl = playerName(current)
     if (seg.value === 'BANKRUPT') {
       setPlayers((ps) =>
         ps.map((p, i) => (i === current ? { ...p, round: 0 } : p))
       )
+      flashRed(tr.bankrupt(nameEl))
       nextPlayer()
     } else if (seg.value === 'LOSE') {
+      flashRed(tr.lose(nameEl))
       nextPlayer()
     } else {
       // Player may now guess one consonant worth this value.
@@ -338,8 +394,9 @@ export default function App() {
       }
       runReveal(cells, nextGuessed, current)
     } else {
-      // Wrong: mark the key red and pass the turn to the next player.
+      // Wrong: red key + 1s red message, then pass the turn.
       setLastWrong(L)
+      flashRed(tr.wrongLetter)
       nextPlayer()
     }
   }
@@ -424,8 +481,34 @@ export default function App() {
             active={phase === 'playing'}
           />
           <Board grid={grid} revealed={revealed} flashing={flashing} />
-          {category && <div className="clue">{category}</div>}
           <div className="keyboard-area">
+            {category && <div className="clue">{category}</div>}
+            <div className={`play-status ${redMsg ? 'wrong' : ''}`}>
+              <span className="ps-text">
+                {redMsg ? (
+                  redMsg
+                ) : spinning ? (
+                  <>
+                    {playerName(current)} {tr.spinning}
+                  </>
+                ) : guessMode === 'consonant' ? (
+                  <>
+                    <span className="spin-points">×{spinValue}</span> —{' '}
+                    {playerName(current)} {tr.pickConsonant}
+                  </>
+                ) : guessMode === 'vowel' ? (
+                  tr.pickVowel
+                ) : !consonantsLeft ? (
+                  <span className="no-consonants">{tr.noConsonants}</span>
+                ) : (
+                  <>
+                    {tr.turn(playerName(current))}
+                    {'\n'}
+                    {tr.spinOrVowel}
+                  </>
+                )}
+              </span>
+            </div>
             <Keyboard
               guessed={guessed}
               phraseLetters={phraseLetters}
@@ -453,7 +536,7 @@ export default function App() {
               <button
                 className="spin-btn"
                 onClick={spin}
-                disabled={spinning || guessMode !== null}
+                disabled={spinning || guessMode !== null || !consonantsLeft}
               >
                 {tr.spin}
               </button>
@@ -468,22 +551,13 @@ export default function App() {
             spinning={spinning}
             onSpinEnd={onSpinEnd}
             onSpin={spin}
-            canSpin={phase === 'playing' && !spinning && guessMode === null}
+            canSpin={
+              phase === 'playing' &&
+              !spinning &&
+              guessMode === null &&
+              consonantsLeft
+            }
           />
-          <div className="wheel-status">
-            {spinning ? (
-              'Spinning…'
-            ) : guessMode === 'consonant' ? (
-              <>
-                <span className="spin-points">×{spinValue}</span> — pick a
-                consonant
-              </>
-            ) : guessMode === 'vowel' ? (
-              'Pick a vowel'
-            ) : (
-              'Spin or buy a vowel'
-            )}
-          </div>
         </div>
       </div>
 
